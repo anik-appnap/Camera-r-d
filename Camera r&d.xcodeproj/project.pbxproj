@@ -11,7 +11,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		093B4F5B2DED5FE500D6BC3D /* Exceptions for "Camera r&d" folder in "Camera r&d" target */ = {
+		093B4FF42DFED4AF00D6BC3D /* Exceptions for "Camera r&d" folder in "Camera r&d" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Main/Info.plist,
@@ -24,7 +24,7 @@
 		093B4F4B2DED5FE300D6BC3D /* Camera r&d */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				093B4F5B2DED5FE500D6BC3D /* Exceptions for "Camera r&d" folder in "Camera r&d" target */,
+				093B4FF42DFED4AF00D6BC3D /* Exceptions for "Camera r&d" folder in "Camera r&d" target */,
 			);
 			path = "Camera r&d";
 			sourceTree = "<group>";
@@ -147,7 +147,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = L3D3A22YK5;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "Camera r&d/Info.plist";
+				INFOPLIST_FILE = "Camera r&d/Main/Info.plist";
 				INFOPLIST_KEY_NSCameraUsageDescription = "App needs camera permission to capture visuals.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "App needs photos access to save image.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "App needs photos access to save image.";
@@ -181,7 +181,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = L3D3A22YK5;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "Camera r&d/Info.plist";
+				INFOPLIST_FILE = "Camera r&d/Main/Info.plist";
 				INFOPLIST_KEY_NSCameraUsageDescription = "App needs camera permission to capture visuals.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "App needs photos access to save image.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "App needs photos access to save image.";
