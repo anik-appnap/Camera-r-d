@@ -197,7 +197,6 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
         alert.addAction(UIAlertAction(title: "Choose from Photo Library", style: .default, handler: { _ in
             self.stopSession()
             var config = PHPickerConfiguration(photoLibrary: .shared())
-            config.filter = .images
             config.selectionLimit = 1
             let picker = PHPickerViewController(configuration: config)
             picker.delegate = self
@@ -206,26 +205,6 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
 
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         present(alert, animated: true)
-    }
-
-    // MARK: - PHPickerViewControllerDelegate
-    func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-        picker.dismiss(animated: true)
-        guard let itemProvider = results.first?.itemProvider, itemProvider.canLoadObject(ofClass: UIImage.self) else {
-            return
-        }
-        itemProvider.loadObject(ofClass: UIImage.self) { [weak self] image, error in
-            guard let self = self, let uiImage = image as? UIImage, let cgImage = uiImage.cgImage else { return }
-            let ciImage = CIImage(cgImage: cgImage)
-            DispatchQueue.main.async {[unowned self] in
-                if let filter = self.selectedFilterModel{
-                    self.currentCIImage = CameraFilterManager.shared.apply(filter: filter, to: ciImage, with: self.intensitySlider.value)
-                }
-                else{
-                    self.currentCIImage = ciImage
-                }
-            }
-        }
     }
 
     func switchToCamera(device: AVCaptureDevice) {
@@ -404,7 +383,7 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
     }
 }
 
-// MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
+// MARK: -  AVCaptureVideoDataOutputSampleBufferDelegate
 extension CameraViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         
@@ -555,6 +534,32 @@ extension CameraViewController: MTKViewDelegate {
     
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
         // No-op
+    }
+}
+
+//MARK: - photo picker
+extension CameraViewController{
+
+    func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+        picker.dismiss(animated: true)
+        guard let itemProvider = results.first?.itemProvider, itemProvider.canLoadObject(ofClass: UIImage.self) else {
+            return
+        }
+        itemProvider.loadObject(ofClass: UIImage.self) { [weak self] image, error in
+            guard let self = self, let uiImage = image as? UIImage, let cgImage = uiImage.cgImage else { return }
+            let ciImage = CIImage(cgImage: cgImage)
+            DispatchQueue.main.async {[unowned self] in
+                if let filter = self.selectedFilterModel{
+                    self.currentCIImage = CameraFilterManager.shared.apply(filter: filter, to: ciImage, with: self.intensitySlider.value)
+                }
+                else if let filter = self.selectedFilter{
+                    self.currentCIImage = CIImageFilterManager.shared.applyFilters(to: ciImage, filter: filter, val: self.intensitySlider.value)
+                }
+                else{
+                    self.currentCIImage = ciImage
+                }
+            }
+        }
     }
 }
 

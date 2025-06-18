@@ -55,7 +55,14 @@ class FilterSelectionView: UIView, UITableViewDelegate, UITableViewDataSource {
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "FilterCell", for: indexPath)
         let filter = filters[indexPath.row]
-        cell.textLabel?.text = "🎨 \(filter.name)"
+        let attributes = filter.attributes
+        if let displayName = attributes[kCIAttributeFilterDisplayName] as? String{
+            cell.textLabel?.text = "🎨 \(displayName)"
+        }
+        else{
+            cell.textLabel?.text = "🎨 \(filter.name)"
+        }
+        
         cell.textLabel?.font = .systemFont(ofSize: 14)
         if indexPath.row == selectedIndex{
             cell.backgroundColor = .gray.withAlphaComponent(0.4)

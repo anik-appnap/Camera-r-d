@@ -27,6 +27,61 @@ class CIImageFilterManager {
         // Preconfigured filters for those that need extra setup
         let crossPolynomial = Self.makeCrossPolynomialFilter()
         
+        // Distortion Effect filters (CICategoryDistortionEffect)
+        let bumpDistortion = CIFilter.bumpDistortion()
+        bumpDistortion.radius = 300
+        bumpDistortion.scale = 0.5
+        bumpDistortion.center = CGPoint(x: 150, y: 150)
+
+        let bumpDistortionLinear = CIFilter.bumpDistortionLinear()
+        bumpDistortionLinear.radius = 300
+        bumpDistortionLinear.scale = 0.5
+        bumpDistortionLinear.center = CGPoint(x: 150, y: 150)
+
+        let circleSplashDistortion = CIFilter.circleSplashDistortion()
+        circleSplashDistortion.radius = 200
+
+        let circularWrap = CIFilter.circularWrap()
+        circularWrap.radius = 150
+        circularWrap.center = CGPoint(x: 150, y: 150)
+
+        let glassDistortion = CIFilter.glassDistortion()
+        glassDistortion.center = CGPoint(x: 150, y: 150)
+        glassDistortion.scale = 500
+
+        let glassLozenge = CIFilter.glassLozenge()
+        glassLozenge.point0 = CGPoint(x: 100, y: 100)
+        glassLozenge.point1 = CGPoint(x: 300, y: 300)
+        glassLozenge.radius = 100
+
+        let pinchDistortion = CIFilter.pinchDistortion()
+        pinchDistortion.radius = 300
+        pinchDistortion.scale = 0.5
+        pinchDistortion.center = CGPoint(x: 150, y: 150)
+
+        let stretchCrop = CIFilter.stretchCrop()
+        stretchCrop.size = CGPoint(x: 300, y: 300)
+        stretchCrop.cropAmount = 0.25
+        stretchCrop.centerStretchAmount = 0.25
+
+        let torusLensDistortion = CIFilter.torusLensDistortion()
+        torusLensDistortion.radius = 160
+        torusLensDistortion.width = 80
+        torusLensDistortion.center = CGPoint(x: 150, y: 150)
+
+        let twirlDistortion = CIFilter.twirlDistortion()
+        twirlDistortion.radius = 200
+        twirlDistortion.angle = 3.14
+
+        
+        let vortexDistortion = CIFilter.vortexDistortion()
+        vortexDistortion.radius = 200
+        vortexDistortion.angle = 3.14
+        vortexDistortion.center = CGPoint(x: 500, y: 500)
+        
+        let displaceDistortion = CIFilter.displacementDistortion()
+        displaceDistortion.scale = 100
+        
         filters = [
             crossPolynomial,
             CIFilter.randomGenerator(),
@@ -50,7 +105,27 @@ class CIImageFilterManager {
             CIFilter.sepiaTone(),
             CIFilter.vignette(),
             CIFilter.vignetteEffect(),
-            CIFilter.vibrance() // newly added
+            CIFilter.vibrance(), // newly added
+            // Distortion Effect filters
+            bumpDistortion,
+            bumpDistortionLinear,
+            circleSplashDistortion,
+            circularWrap,
+            glassLozenge,
+            pinchDistortion,
+            stretchCrop,
+            torusLensDistortion,
+            twirlDistortion,
+            vortexDistortion,
+            displaceDistortion,
+            glassDistortion,
+            CIFilter.triangleTile(),
+            CIFilter.perspectiveTile(),
+            CIFilter.pointillize(),
+            CIFilter.pixellate(),
+            CIFilter.motionBlur(),
+            CIFilter.perspectiveTransform(),
+            CIFilter.photoEffectTransfer()
         ]
         
         // Set default parameters for filters where necessary
@@ -88,26 +163,76 @@ class CIImageFilterManager {
         if filter.name == "CIRandomGenerator"{
             return applyTVFilter(on: image)
         }
+        else if filter.name == "CIGlassDistortion"{
+            filter.setValue(image, forKey: kCIInputImageKey)
+            let randomNoiseImage = generateRandomImage(isRandom: false)
+            filter.setValue(randomNoiseImage.cropped(to: image.extent), forKey: "inputTexture")
+        }
+        else if filter.name == "CIDisplacementDistortion"{
+            filter.setValue(image, forKey: kCIInputImageKey)
+            let checkboardImage = getCheckboardImage(with: image.extent)
+            filter.setValue(checkboardImage, forKey: "inputDisplacementImage")
+        }
+        else if filter.name == "CICircleSplashDistortion" {
+            filter.setValue(image, forKey: kCIInputImageKey)
+            if let faceFeature = detectFaces(in: image) {
+                let center = CIVector(x: faceFeature.bounds.midX, y: faceFeature.bounds.midY)
+                filter.setValue(center, forKey: kCIInputCenterKey)
+            }
+        }
+        else if filter.name == "CITwirlDistortion"{
+            filter.setValue(image, forKey: kCIInputImageKey)
+            if let faceFeature = detectFaces(in: image) {
+                let center = CIVector(x: faceFeature.bounds.midX, y: faceFeature.bounds.midY)
+                filter.setValue(center, forKey: kCIInputCenterKey)
+            }
+        }
         else{
             filter.setValue(image, forKey: kCIInputImageKey)
-            return filter.outputImage
         }
+        return filter.outputImage?.cropped(to: image.extent)
     }
     
+    func detectFaces(in ciImage: CIImage) -> CIFaceFeature? {
+        let options: [String: Any] = [CIDetectorAccuracy: CIDetectorAccuracyHigh]
+        let detector = CIDetector(ofType: CIDetectorTypeFace, context: nil, options: options)!
+        let feature = detector.features(in: ciImage).first as? CIFaceFeature
+        return feature
+    }
+    
+    func getCheckboardImage(with extent: CGRect)-> CIImage?{
+        let checkboardFilter = CIFilter.checkerboardGenerator()
+        checkboardFilter.color0 = .white
+        checkboardFilter.color1 = .black
+        return checkboardFilter.outputImage?.cropped(to: extent)
+    }
+    
+    func generateRandomImage(isRandom: Bool = true)->CIImage{
+        let randomfilter = CIFilter.randomGenerator()
+        
+        let offset = isRandom ? CGFloat.random(in: 0...1000) : 100
+        let transform = CGAffineTransform(translationX: -offset, y: -offset)
+        let scale = isRandom ? CGFloat.random(in: 100...300) : 100
+        let shiftedImage = randomfilter.outputImage!.transformed(by: transform).cropped(to: CGRect(origin: .zero,
+                                                                                                   size: CGSize(
+                                                                                                    width: scale,
+                                                                                                    height: scale)))
+        return shiftedImage
+    }
+    
+    func textImage(inputText: String) -> CIImage {
+        let textImageGenerator = CIFilter.textImageGenerator()
+        textImageGenerator.text = inputText
+        textImageGenerator.fontName = "Helvetica"
+        textImageGenerator.fontSize = 25
+        textImageGenerator.scaleFactor = 4
+        return textImageGenerator.outputImage!
+    }
     
     func applyTVFilter(on image: CIImage)->CIImage?{
         let filter = CIFilter.sourceOverCompositing()
-        let randomfilter = CIFilter.randomGenerator()
         
-        let offsetX = CGFloat.random(in: 0...1000)
-        let offsetY = CGFloat.random(in: 0...1000)
-        let transform = CGAffineTransform(translationX: -offsetX, y: -offsetY)
-        let shiftedImage = randomfilter.outputImage!.transformed(by: transform).cropped(to: CGRect(origin: .zero,
-                                                                                                   size: CGSize(
-                                                                                                    width: CGFloat.random(in: 100...300),
-                                                                                                    height: CGFloat.random(in: 100...300))))
-        
-        let randoImage = shiftedImage.resizeCIImage(to: image.extent.size)
+        let randoImage = generateRandomImage().resizeCIImage(to: image.extent.size)?.setOpacity(alpha: 0.5)
         filter.inputImage = randoImage
         
         filter.backgroundImage = image
