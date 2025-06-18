@@ -35,12 +35,17 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
     var isRecording = false
     var recordingStartTime: CMTime?
     var hasStartedSession = false
+    
     // AV Foundation
     let captureSession = AVCaptureSession()
     let cameraHolderView = UIView()
     let cameraView = MTKView()
     var cameraFrameAdded = false
     var currentCameraPosition: AVCaptureDevice.Position = .front
+    
+    // overlay view
+    var overlayPlayer: AVPlayer?
+    var overlayVideoOutput: AVPlayerItemVideoOutput?
     
     public var metalDevice: MTLDevice!
     public var metalCommandQueue: MTLCommandQueue!
@@ -319,6 +324,13 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
         intensitySlider.value = 0
         intensitySlider.minimumValue = -1
         intensitySlider.maximumValue = 1
+        
+        if newFilter.name ==  "CIVignette"{
+            setupOverlayPlayer()
+        }
+        else{
+            stopOverlayPlayer()
+        }
     }
     
     @objc func flipCameraTapped() {
@@ -417,6 +429,22 @@ extension CameraViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
             }
         }
 
+        
+        // Attempt to get overlay frame
+        if let output = overlayVideoOutput,
+           let overlayPixelBuffer = output.copyPixelBuffer(forItemTime: overlayPlayer!.currentTime(), itemTimeForDisplay: nil) {
+            
+            let overlayCI = CIImage(cvPixelBuffer: overlayPixelBuffer).resizeCIImage(to: ciimage.extent.size)
+
+            // Composite overlay on top of camera
+            let composite = CIFilter.sourceOverCompositing()
+            composite.inputImage = overlayCI?.setOpacity(alpha: 0.7)
+            composite.backgroundImage = ciimage
+            if let compositedImage = composite.outputImage {
+                ciimage = compositedImage
+            }
+        }
+        
         DispatchQueue.main.async {
             self.currentCIImage = ciimage
         }
@@ -530,7 +558,42 @@ extension CameraViewController: MTKViewDelegate {
     }
 }
 
-
-
-
-
+//MARK: - Overlay video
+extension CameraViewController{
+    func setupOverlayPlayer() {
+        guard let overlayURL = Bundle.main.url(forResource: "overlayVideo", withExtension: "mp4") else { return }
+        let asset = AVAsset(url: overlayURL)
+        let item = AVPlayerItem(asset: asset)
+        
+        let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [
+            kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)
+        ])
+        
+        item.add(output)
+        overlayPlayer = AVPlayer(playerItem: item)
+        overlayVideoOutput = output
+        
+        overlayPlayer?.play()
+        
+        NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
+            self?.overlayPlayer?.seek(to: .zero)
+            self?.overlayPlayer?.play()
+        }
+    }
+    
+    func stopOverlayPlayer() {
+        guard let _ = overlayPlayer else{return}
+        // Stop playback
+        overlayPlayer?.pause()
+        
+        // Remove player item and output
+        overlayPlayer?.replaceCurrentItem(with: nil)
+        overlayVideoOutput = nil
+        
+        // Remove notifications
+        NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: nil)
+        
+        // Deallocate player
+        overlayPlayer = nil
+    }
+}
