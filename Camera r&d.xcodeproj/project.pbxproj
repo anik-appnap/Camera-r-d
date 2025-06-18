@@ -6,6 +6,37 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildRule section */
+		093B505B2E001A5B00D6BC3D /* PBXBuildRule */ = {
+			isa = PBXBuildRule;
+			compilerSpec = com.apple.compilers.proxy.script;
+			filePatterns = "*ci.metal";
+			fileType = pattern.proxy;
+			inputFiles = (
+			);
+			isEditable = 1;
+			outputFiles = (
+				"$(DERIVED_FILE_DIR)/${INPUT_FILE_BASE}.air",
+			);
+			runOncePerArchitecture = 0;
+			script = "# Type a script or drag a script file from your workspace to insert its path.\nxcrun metal -c -fcikernel \"${INPUT_FILE_PATH}\" \\\n  -o \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+		};
+		093B505C2E001AE200D6BC3D /* PBXBuildRule */ = {
+			isa = PBXBuildRule;
+			compilerSpec = com.apple.compilers.proxy.script;
+			filePatterns = "*.ci.air";
+			fileType = pattern.proxy;
+			inputFiles = (
+			);
+			isEditable = 1;
+			outputFiles = (
+				"$(METAL_LIBRARY_OUTPUT_DIR)/$(INPUT_FILE_BASE).metallib",
+			);
+			runOncePerArchitecture = 0;
+			script = "# Type a script or drag a script file from your workspace to insert its path.\nxcrun metallib -cikernel \"${INPUT_FILE_PATH}\" -o \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+		};
+/* End PBXBuildRule section */
+
 /* Begin PBXFileReference section */
 		093B4F492DED5FE300D6BC3D /* Camera r&d.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Camera r&d.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -70,6 +101,8 @@
 				093B4F472DED5FE300D6BC3D /* Resources */,
 			);
 			buildRules = (
+				093B505C2E001AE200D6BC3D /* PBXBuildRule */,
+				093B505B2E001A5B00D6BC3D /* PBXBuildRule */,
 			);
 			dependencies = (
 			);
@@ -148,6 +181,7 @@
 				DEVELOPMENT_TEAM = L3D3A22YK5;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Camera r&d/Main/Info.plist";
+				INFOPLIST_KEY_MetalCaptureEnabled = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "App needs camera permission to capture visuals.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "App needs photos access to save image.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "App needs photos access to save image.";
@@ -162,8 +196,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				MTLLINKER_FLAGS = "";
-				MTL_COMPILER_FLAGS = "";
+				MTLLINKER_FLAGS = "-cikernel";
+				MTL_COMPILER_FLAGS = "-fcikernel";
 				PRODUCT_BUNDLE_IDENTIFIER = "appnap.Camera-r-d";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -182,6 +216,7 @@
 				DEVELOPMENT_TEAM = L3D3A22YK5;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Camera r&d/Main/Info.plist";
+				INFOPLIST_KEY_MetalCaptureEnabled = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "App needs camera permission to capture visuals.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "App needs photos access to save image.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "App needs photos access to save image.";
@@ -196,8 +231,8 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				MTLLINKER_FLAGS = "";
-				MTL_COMPILER_FLAGS = "";
+				MTLLINKER_FLAGS = "-cikernel";
+				MTL_COMPILER_FLAGS = "-fcikernel";
 				PRODUCT_BUNDLE_IDENTIFIER = "appnap.Camera-r-d";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

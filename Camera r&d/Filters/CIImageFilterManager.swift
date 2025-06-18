@@ -29,6 +29,10 @@ class CIImageFilterManager {
         
         filters = [
             crossPolynomial,
+            CIFilter.randomGenerator(),
+            CIFilter.customFalseColorFilter(),
+            CIFilter.customVibraceFilter(),
+            CIFilter.glitchFilter(),
             CIFilter.colorInvert(),
             CIFilter.colorMap(),
             CIFilter.colorMonochrome(),
@@ -54,65 +58,59 @@ class CIImageFilterManager {
             filter.intensity = 1.0
             filter.color = CIColor(red: 0.7, green: 0.7, blue: 0.7)
         }
-
+        
         if let filter = filters.first(where: { $0.name == "CIColorPosterize" }) as? CIColorPosterize {
             filter.levels = 6
         }
-
+        
         if let filter = filters.first(where: { $0.name == "CIFalseColor" }) as? CIFalseColor {
             filter.color0 = CIColor.red
             filter.color1 = CIColor.blue
         }
-
+        
         if let filter = filters.first(where: { $0.name == "CISepiaTone" }) as? CISepiaTone {
             filter.intensity = 1.0
         }
-
+        
         if let filter = filters.first(where: { $0.name == "CIVignette" }) as? CIVignette {
             filter.intensity = 1.0
             filter.radius = 2.0
         }
-
+        
         // Optionally, set a default value for CIFilter.vibrance()
         if let filter = filters.first(where: { $0.name == "CIVibrance" }) as? CIVibrance {
             filter.amount = 1.0
         }
     }
     
-
+    
     func applyFilters(to image: CIImage, filter: CIFilter, val: Float) -> CIImage? {
-        
-//        filter.setValue(image, forKey: kCIInputImageKey)
-//        return filter.outputImage
-        
-        let vibranceKernelSource = """
-        kernel vec4 vibranceFilter(__sample image, float vibrance) {
-            float average = (image.r + image.g + image.b) / 3.0;
-            float mx = max(max(image.r, image.g), image.b);
-            float amt = (mx - average) * (-vibrance * 3.0);
-            vec3 adjusted = mix(image.rgb, vec3(mx), amt);
-            return vec4(adjusted, image.a);
+        if filter.name == "CIRandomGenerator"{
+            return applyTVFilter(on: image)
         }
-        """
-        
-        guard let kernel = try? CIColorKernel(source: vibranceKernelSource) else {
-                print("❌ Failed to compile vibrance kernel")
-                return nil
-            }
-        
-        let falseColorKernelCode = """
-        kernel vec4 falseColor(__sample image, vec3 firstColor, vec3 secondColor) {
-            float luminance = dot(image.rgb, vec3(0.2126, 0.7152, 0.0722));
-            vec3 color = mix(firstColor, secondColor, luminance);
-            return vec4(color, image.a);
+        else{
+            filter.setValue(image, forKey: kCIInputImageKey)
+            return filter.outputImage
         }
-        """
+    }
+    
+    
+    func applyTVFilter(on image: CIImage)->CIImage?{
+        let filter = CIFilter.sourceOverCompositing()
+        let randomfilter = CIFilter.randomGenerator()
         
-        guard let falseColorKernel = try? CIColorKernel(source: falseColorKernelCode) else {
-                print("❌ Failed to compile vibrance kernel")
-                return nil
-            }
+        let offsetX = CGFloat.random(in: 0...1000)
+        let offsetY = CGFloat.random(in: 0...1000)
+        let transform = CGAffineTransform(translationX: -offsetX, y: -offsetY)
+        let shiftedImage = randomfilter.outputImage!.transformed(by: transform).cropped(to: CGRect(origin: .zero,
+                                                                                                   size: CGSize(
+                                                                                                    width: CGFloat.random(in: 100...300),
+                                                                                                    height: CGFloat.random(in: 100...300))))
         
-        return falseColorKernel.apply(extent: image.extent, arguments: [image,CIVector(x: 1, y: 0, z: 0), CIVector(x: 0, y: 0, z: 1)])
+        let randoImage = shiftedImage.resizeCIImage(to: image.extent.size)
+        filter.inputImage = randoImage
+        
+        filter.backgroundImage = image
+        return filter.outputImage
     }
 }
