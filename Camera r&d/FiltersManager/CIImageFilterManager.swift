@@ -82,7 +82,18 @@ class CIImageFilterManager {
         let displaceDistortion = CIFilter.displacementDistortion()
         displaceDistortion.scale = 100
         
+        let colorCubeFilter = CIFilter.colorCube()
+        if let cubeURL = Bundle.main.url(forResource: "1999-modified-2", withExtension: "cube"){
+            let lutManager = LUTParserManager.shared
+            if let (dimention, data) = lutManager.parseCubeLUT(from: cubeURL){
+                colorCubeFilter.cubeDimension = Float(dimention)
+                colorCubeFilter.cubeData = data
+            }
+        }
+        
+        
         filters = [
+            colorCubeFilter,
             crossPolynomial,
             CIFilter.randomGenerator(),
             CIFilter.customFalseColorFilter(),
