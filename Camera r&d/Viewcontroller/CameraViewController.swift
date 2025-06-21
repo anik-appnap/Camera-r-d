@@ -60,6 +60,8 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
     var mediaType: MediaType? = .none
     var originalSelectedImage: CIImage? = nil
     
+    var galleryDisplayLink: CADisplayLink?
+    
     public var metalDevice: MTLDevice!
     public var metalCommandQueue: MTLCommandQueue!
     public var ciContext: CIContext!
@@ -198,38 +200,39 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
             mediaType: .video,
             position: .unspecified
         )
-
+        
         let cameras = discovery.devices
         let alert = UIAlertController(title: "Select Camera", message: nil, preferredStyle: .actionSheet)
-
+        
         for device in cameras {
             let name = "\(device.localizedName) (\(device.position == .front ? "Front" : "Back"))"
             alert.addAction(UIAlertAction(title: name, style: .default, handler: { _ in
                 self.switchToCamera(device: device)
             }))
         }
-
-        alert.addAction(UIAlertAction(title: "Choose from Photo Library", style: .default, handler: { _ in
-            self.stopSession()
+        
+        alert.addAction(UIAlertAction(title: "Choose from Photo Library", style: .default, handler: {[unowned self] _ in
             var config = PHPickerConfiguration(photoLibrary: .shared())
             config.selectionLimit = 1
+            config.filter = .any(of: [.images, .videos])
             let picker = PHPickerViewController(configuration: config)
             picker.delegate = self
             self.present(picker, animated: true)
         }))
-
+        
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         present(alert, animated: true)
     }
-
+    
     func switchToCamera(device: AVCaptureDevice) {
-        hasMediaPickedFromGallery = false
+        stopGalleryVideoObserver()
+        
         captureSession.beginConfiguration()
-
+        
         for input in captureSession.inputs {
             captureSession.removeInput(input)
         }
-
+        
         do {
             let newInput = try AVCaptureDeviceInput(device: device)
             if captureSession.canAddInput(newInput) {
@@ -239,12 +242,12 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
         } catch {
             print("Failed to switch camera: \(error)")
         }
-
+        
         if let connection = captureSession.connections.first {
             connection.isVideoMirrored = (device.position == .front)
             connection.videoOrientation = .portrait
         }
-
+        
         captureSession.commitConfiguration()
         if !captureSession.isRunning{
             startSession()
@@ -252,23 +255,24 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
     }
     
     func switchCamera() {
+        
         self.captureSession.beginConfiguration()
-
+        
         // Remove all inputs
         for input in self.captureSession.inputs {
             self.captureSession.removeInput(input)
         }
-
+        
         // Toggle camera position
         self.currentCameraPosition = self.currentCameraPosition.toggle
-
+        
         // Select new camera
         guard let newCamera = AVCaptureDevice.default(.builtInDualCamera, for: .video, position: self.currentCameraPosition) else {
             print("Failed to get new camera.")
             self.captureSession.commitConfiguration()
             return
         }
-
+        
         do {
             let newInput = try AVCaptureDeviceInput(device: newCamera)
             if self.captureSession.canAddInput(newInput) {
@@ -279,7 +283,7 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
             self.captureSession.commitConfiguration()
             return
         }
-
+        
         // Mirror front camera
         if let connection = self.captureSession.connections.first {
             connection.isVideoMirrored = (self.currentCameraPosition == .front)
@@ -334,6 +338,7 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
             setupOverlayPlayer()
         }
         else{
+            if hasMediaPickedFromGallery{return}
             stopOverlayPlayer()
         }
     }
@@ -344,15 +349,15 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
     
     @objc func capturePhoto(){
         guard let ciImage = currentCIImage else { return }
-
+        
         let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent)
         guard let image = cgImage else { return }
-
+        
         let uiImage = UIImage(cgImage: image, scale: UIScreen.main.scale, orientation: .up)
-
+        
         // Save to photo library
         UIImageWriteToSavedPhotosAlbum(uiImage, nil, nil, nil)
-
+        
         // Optional: confirmation alert
         let alert = UIAlertController(title: "Saved", message: "Photo saved to library.", preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
@@ -386,7 +391,7 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
                 ]
                 videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
                 videoInput?.expectsMediaDataInRealTime = true
-
+                
                 let bufferAttributes: [String: Any] = [
                     kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
                     kCVPixelBufferWidthKey as String: 720,
@@ -398,7 +403,7 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
                         assetWriterInput: videoInput,
                         sourcePixelBufferAttributes: bufferAttributes)
                 }
-
+                
                 assetWriter?.startWriting()
                 hasStartedSession = false
                 isRecording = true
@@ -433,14 +438,14 @@ extension CameraViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
                 ciimage = filteredImage
             }
         }
-
+        
         
         // Attempt to get overlay frame
         if let output = overlayVideoOutput,
            let overlayPixelBuffer = output.copyPixelBuffer(forItemTime: overlayPlayer!.currentTime(), itemTimeForDisplay: nil) {
             
             let overlayCI = CIImage(cvPixelBuffer: overlayPixelBuffer).resizeCIImage(to: ciimage.extent.size)
-
+            
             // Composite overlay on top of camera
             let composite = CIFilter.sourceOverCompositing()
             composite.inputImage = overlayCI?.setOpacity(alpha: 0.7)
@@ -453,7 +458,7 @@ extension CameraViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
         DispatchQueue.main.async {
             self.currentCIImage = ciimage
         }
-
+        
         // Video recording: append pixel buffer if recording
         if isRecording,
            let pixelBufferPool = pixelBufferAdaptor?.pixelBufferPool,
@@ -473,7 +478,7 @@ extension CameraViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didDrop sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard let attachment = sampleBuffer.attachments[.droppedFrameReason],
               let resone = attachment.value as? String else{return}
-    
+        
         switch resone as CFString{
         case kCMSampleBufferDroppedFrameReason_FrameWasLate:
             print("🔴 frame was late")
@@ -493,17 +498,17 @@ extension CameraViewController {
         var pixelBufferOut: CVPixelBuffer?
         let status = CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pixelBufferOut)
         guard status == kCVReturnSuccess, let pixelBuffer = pixelBufferOut else { return nil }
-
+        
         let pixelBufferSize = CGSize(width: CVPixelBufferGetWidth(pixelBuffer), height: CVPixelBufferGetHeight(pixelBuffer))
         let scaleX = pixelBufferSize.width / image.extent.width
         let scaleY = pixelBufferSize.height / image.extent.height
         let scale = min(scaleX, scaleY)
-
+        
         let scaledImage = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         let xOffset = (pixelBufferSize.width - scaledImage.extent.width) / 2
         let yOffset = (pixelBufferSize.height - scaledImage.extent.height) / 2
         let centeredImage = scaledImage.transformed(by: CGAffineTransform(translationX: xOffset, y: yOffset))
-
+        
         ciContext.render(centeredImage, to: pixelBuffer)
         return pixelBuffer
     }
@@ -523,9 +528,9 @@ extension CameraViewController: MTKViewDelegate {
         let scaleX = drawSize.width / ciImage.extent.width
         let scaleY = drawSize.height / ciImage.extent.height
         let scale = min(scaleX, scaleY)
-
+        
         let scaledImage = ciImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-
+        
         let xOffset = (drawSize.width - scaledImage.extent.width) / 2
         let yOffset = (drawSize.height - scaledImage.extent.height) / 2
         let translatedImage = scaledImage.transformed(by: CGAffineTransform(translationX: xOffset, y: yOffset))
@@ -540,7 +545,7 @@ extension CameraViewController: MTKViewDelegate {
         if let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderPassDescriptor) {
             renderEncoder.endEncoding()
         }
-
+        
         self.ciContext.render(
             translatedImage,
             to: currentDrawable.texture,
@@ -565,30 +570,109 @@ extension CameraViewController: MTKViewDelegate {
 
 //MARK: - photo picker
 extension CameraViewController{
-
     func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
         picker.dismiss(animated: true)
-        hasMediaPickedFromGallery = true
-        mediaType = .photo
-        guard let itemProvider = results.first?.itemProvider, itemProvider.canLoadObject(ofClass: UIImage.self) else {
+        
+        guard let itemProvider = results.first?.itemProvider else {
             return
         }
-        itemProvider.loadObject(ofClass: UIImage.self) { [weak self] image, error in
-            guard let self = self, let uiImage = image as? UIImage, let cgImage = uiImage.cgImage else { return }
-            let ciImage = CIImage(cgImage: cgImage)
-            self.originalSelectedImage = ciImage
-            DispatchQueue.main.async {[unowned self] in
-                if let filter = self.selectedFilterModel{
-                    self.currentCIImage = CameraFilterManager.shared.apply(filter: filter, to: ciImage, with: self.intensitySlider.value)
-                }
-                else if let filter = self.selectedFilter{
-                    self.currentCIImage = CIImageFilterManager.shared.applyFilters(to: ciImage, filter: filter, val: self.intensitySlider.value)
-                }
-                else{
-                    self.currentCIImage = ciImage
+        
+        stopSession()
+        hasMediaPickedFromGallery = true
+        
+        if itemProvider.canLoadObject(ofClass: UIImage.self){
+            mediaType = .photo
+            itemProvider.loadObject(ofClass: UIImage.self) { [weak self] image, error in
+                guard let self = self, let uiImage = image as? UIImage, let cgImage = uiImage.cgImage else { return }
+                let ciImage = CIImage(cgImage: cgImage)
+                self.originalSelectedImage = ciImage
+                DispatchQueue.main.async {[unowned self] in
+                    if let filter = self.selectedFilterModel{
+                        self.currentCIImage = CameraFilterManager.shared.apply(filter: filter, to: ciImage, with: self.intensitySlider.value)
+                    }
+                    else if let filter = self.selectedFilter{
+                        self.currentCIImage = CIImageFilterManager.shared.applyFilters(to: ciImage, filter: filter, val: self.intensitySlider.value)
+                    }
+                    else{
+                        self.currentCIImage = ciImage
+                    }
                 }
             }
         }
+        else{
+            mediaType = .video
+            itemProvider.loadFileRepresentation(forTypeIdentifier: "public.movie") { [unowned self] url, error in
+                guard let localURL = url else{return}
+                let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(localURL.lastPathComponent)
+                try? FileManager.default.copyItem(at: localURL, to: tempURL)
+                
+                let asset = AVAsset(url: tempURL)
+                let item = AVPlayerItem(asset: asset)
+                let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [
+                    kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA)
+                ])
+                item.add(output)
+                
+                DispatchQueue.main.async {
+                    self.overlayPlayer = AVPlayer(playerItem: item)
+                    self.overlayVideoOutput = output
+                    self.overlayVideoOutput?.requestNotificationOfMediaDataChange(withAdvanceInterval: 0.03)
+                    self.overlayPlayer?.play()
+                    self.setupGalleryVideoObserver()
+                    
+                    NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
+                        self?.overlayPlayer?.seek(to: .zero)
+                        self?.overlayPlayer?.play()
+                    }
+                }
+            }
+        }
+        
+        
+    }
+    
+    func setupGalleryVideoObserver(){
+        galleryDisplayLink?.invalidate()
+        galleryDisplayLink = CADisplayLink(target: self, selector: #selector(self.updateGalleryFrame))
+        galleryDisplayLink?.add(to: .main, forMode: .default)
+    }
+    
+    @objc func updateGalleryFrame() {
+        guard let output = overlayVideoOutput,
+              let player = overlayPlayer else {
+            print("⚠️ No player or output.")
+            return
+        }
+        
+        let currentTime = player.currentTime()
+        guard currentTime.seconds > 0.01 else{return}
+        guard output.hasNewPixelBuffer(forItemTime: currentTime),
+              let pixelBuffer = output.copyPixelBuffer(forItemTime: currentTime, itemTimeForDisplay: nil) else {
+            print("⚠️ No pixel buffer available at time: \(currentTime.seconds)")
+            return
+        }
+        
+        var ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        
+        if let filterModel = selectedFilterModel {
+            ciImage = CameraFilterManager.shared.apply(filter: filterModel, to: ciImage, with: intensitySlider.value) ?? ciImage
+        } else if let filter = selectedFilter {
+            ciImage = CIImageFilterManager.shared.applyFilters(to: ciImage, filter: filter, val: intensitySlider.value) ?? ciImage
+        }
+        
+        DispatchQueue.main.async {
+            self.currentCIImage = ciImage
+        }
+    }
+    
+    func stopGalleryVideoObserver(){
+        hasMediaPickedFromGallery = false
+        mediaType = nil
+        originalSelectedImage = nil
+        currentCIImage = nil
+        galleryDisplayLink?.invalidate()
+        galleryDisplayLink = nil
+        stopOverlayPlayer()
     }
 }
 
