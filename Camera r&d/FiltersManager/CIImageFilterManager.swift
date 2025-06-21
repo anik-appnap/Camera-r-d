@@ -91,8 +91,11 @@ class CIImageFilterManager {
             }
         }
         
+        let personSegmentationFilter = CIFilter.personSegmentation()
+        personSegmentationFilter.qualityLevel = 2
         
         filters = [
+            personSegmentationFilter,
             colorCubeFilter,
             crossPolynomial,
             CIFilter.randomGenerator(),
@@ -197,6 +200,19 @@ class CIImageFilterManager {
                 let center = CIVector(x: faceFeature.bounds.midX, y: faceFeature.bounds.midY)
                 filter.setValue(center, forKey: kCIInputCenterKey)
             }
+        }
+        else if filter.name == "CIPersonSegmentation"{
+            filter.setValue(image, forKey: kCIInputImageKey)
+            let output = filter.outputImage?.cropped(to: image.extent).resizeCIImage(to: image.extent.size)
+            
+            let invertedFilter = CIFilter.colorInvert()
+            invertedFilter.inputImage = image
+            
+            let blendFilter = CIFilter.blendWithRedMask()
+            blendFilter.inputImage = invertedFilter.outputImage
+            blendFilter.maskImage = output
+            blendFilter.backgroundImage = image
+            return blendFilter.outputImage
         }
         else{
             filter.setValue(image, forKey: kCIInputImageKey)

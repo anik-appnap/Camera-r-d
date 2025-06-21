@@ -38,7 +38,10 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
     
     // AV Foundation
     let captureSession = AVCaptureSession()
-    let cameraHolderView = UIView()
+    let cameraHolderView: UIView = {
+        let view = UIView()
+        return view
+    }()
     let cameraView = MTKView()
     var cameraFrameAdded = false
     var currentCameraPosition: AVCaptureDevice.Position = .front
@@ -81,6 +84,8 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         if !cameraFrameAdded {
+            cameraView.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+            cameraView.isOpaque = false
             cameraHolderView.addSubview(cameraView)
             cameraView.fillSuperview()
             cameraFrameAdded.toggle()
