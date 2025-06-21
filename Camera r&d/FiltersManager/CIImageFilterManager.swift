@@ -256,7 +256,7 @@ class CIImageFilterManager {
         return textImageGenerator.outputImage!
     }
     
-    func applyTVFilter(on image: CIImage)->CIImage?{
+    private func applyTVFilter(on image: CIImage)->CIImage?{
         let filter = CIFilter.sourceOverCompositing()
         
         let randoImage = generateRandomImage().resizeCIImage(to: image.extent.size)?.setOpacity(alpha: 0.5)

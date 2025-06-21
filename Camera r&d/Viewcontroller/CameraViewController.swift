@@ -27,6 +27,11 @@ extension AVCaptureDevice.Position{
     }
 }
 
+enum MediaType{
+    case video
+    case photo
+}
+
 class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPickerViewControllerDelegate {
     // Video recording state properties
     var assetWriter: AVAssetWriter?
@@ -49,6 +54,11 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
     // overlay view
     var overlayPlayer: AVPlayer?
     var overlayVideoOutput: AVPlayerItemVideoOutput?
+    
+    //photo picker
+    var hasMediaPickedFromGallery: Bool = false
+    var mediaType: MediaType? = .none
+    var originalSelectedImage: CIImage? = nil
     
     public var metalDevice: MTLDevice!
     public var metalCommandQueue: MTLCommandQueue!
@@ -213,6 +223,7 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
     }
 
     func switchToCamera(device: AVCaptureDevice) {
+        hasMediaPickedFromGallery = false
         captureSession.beginConfiguration()
 
         for input in captureSession.inputs {
@@ -308,6 +319,16 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
         intensitySlider.value = 0
         intensitySlider.minimumValue = -1
         intensitySlider.maximumValue = 1
+        
+        if hasMediaPickedFromGallery{
+            if mediaType == .photo{
+                guard let selecteImage = originalSelectedImage else{return}
+                currentCIImage = CIImageFilterManager.shared.applyFilters(to: selecteImage, filter: newFilter, val: 0)
+            }
+            else{
+                
+            }
+        }
         
         if newFilter.name ==  "CIVignette"{
             setupOverlayPlayer()
@@ -547,12 +568,15 @@ extension CameraViewController{
 
     func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
         picker.dismiss(animated: true)
+        hasMediaPickedFromGallery = true
+        mediaType = .photo
         guard let itemProvider = results.first?.itemProvider, itemProvider.canLoadObject(ofClass: UIImage.self) else {
             return
         }
         itemProvider.loadObject(ofClass: UIImage.self) { [weak self] image, error in
             guard let self = self, let uiImage = image as? UIImage, let cgImage = uiImage.cgImage else { return }
             let ciImage = CIImage(cgImage: cgImage)
+            self.originalSelectedImage = ciImage
             DispatchQueue.main.async {[unowned self] in
                 if let filter = self.selectedFilterModel{
                     self.currentCIImage = CameraFilterManager.shared.apply(filter: filter, to: ciImage, with: self.intensitySlider.value)
