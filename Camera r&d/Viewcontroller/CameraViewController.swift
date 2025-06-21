@@ -319,6 +319,11 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
     }
     
     func didSelectFilter(newFilter: CIFilter) {
+        if newFilter == selectedFilter{
+            selectedFilter = nil
+            stopOverlayPlayer()
+            return
+        }
         selectedFilter = newFilter
         intensitySlider.value = 0
         intensitySlider.minimumValue = -1
