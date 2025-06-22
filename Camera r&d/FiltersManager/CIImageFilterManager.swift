@@ -205,14 +205,16 @@ class CIImageFilterManager {
             filter.setValue(image, forKey: kCIInputImageKey)
             let output = filter.outputImage?.cropped(to: image.extent).resizeCIImage(to: image.extent.size)
             
-            let invertedFilter = CIFilter.colorInvert()
-            invertedFilter.inputImage = image
             
             let blendFilter = CIFilter.blendWithRedMask()
-            blendFilter.inputImage = invertedFilter.outputImage
+            blendFilter.inputImage = image
             blendFilter.maskImage = output
-            blendFilter.backgroundImage = image
-            return blendFilter.outputImage
+            blendFilter.backgroundImage = nil
+            
+            let blurFilter = CIFilter.motionBlur()
+            blurFilter.inputImage = blendFilter.outputImage            
+            
+            return blurFilter.outputImage?.transformed(by: .init(translationX: -(blurFilter.outputImage?.extent.origin.x ?? 0), y: 0))
         }
         else{
             filter.setValue(image, forKey: kCIInputImageKey)

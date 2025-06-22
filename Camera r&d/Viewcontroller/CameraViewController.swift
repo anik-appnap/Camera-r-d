@@ -32,6 +32,23 @@ enum MediaType{
     case photo
 }
 
+enum AspectRatio: String, CaseIterable{
+    case portrait = "Potrait"
+    case landscape = "Landscape"
+    case square = "Square"
+    
+    var size: CGSize{
+        switch self {
+        case .portrait:
+            return CGSize(width: 320, height: 570)
+        case .landscape:
+            return CGSize(width: 414, height: 233)
+        case .square:
+            return CGSize(width: 320, height: 320)
+        }
+    }
+}
+
 class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPickerViewControllerDelegate {
     // Video recording state properties
     var assetWriter: AVAssetWriter?
@@ -49,7 +66,11 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
     }()
     let cameraView = MTKView()
     var cameraFrameAdded = false
-    var currentCameraPosition: AVCaptureDevice.Position = .front
+    var currentCameraPosition: AVCaptureDevice.Position = .back
+    
+    //ratio
+    var cameraViewHeightConstraint: NSLayoutConstraint!
+    var cameraViewWidthConstraint: NSLayoutConstraint!
     
     // overlay view
     var overlayPlayer: AVPlayer?
@@ -58,6 +79,7 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
     //photo picker
     var hasMediaPickedFromGallery: Bool = false
     var mediaType: MediaType? = .none
+    var selectedAspectRatio: AspectRatio = .square
     var originalSelectedImage: CIImage? = nil
     
     var galleryDisplayLink: CADisplayLink?
@@ -71,6 +93,7 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
     var selectedFilter: CIFilter?
     
     let switchButton = UIButton(type: .system)
+    let ratioButton = UIButton(type: .system)
     let intensitySlider = UISlider()
     let photoCaptureButton = UIButton(type: .system)
     let videoCaptureButton = UIButton(type: .system)
@@ -99,7 +122,14 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
             cameraView.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
             cameraView.isOpaque = false
             cameraHolderView.addSubview(cameraView)
-            cameraView.fillSuperview()
+            cameraView.center(in: cameraHolderView)
+            
+            cameraViewWidthConstraint = cameraView.widthAnchor.constraint(equalToConstant: selectedAspectRatio.size.width)
+            cameraViewHeightConstraint = cameraView.heightAnchor.constraint(equalToConstant: selectedAspectRatio.size.width)
+            
+            cameraViewHeightConstraint.isActive = true
+            cameraViewWidthConstraint.isActive = true
+            
             cameraFrameAdded.toggle()
         }
         startSession()
@@ -146,45 +176,12 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
         videoCaptureButton.addTarget(self, action: #selector(recordVideo), for: .touchUpInside)
         view.addSubview(videoCaptureButton)
         videoCaptureButton.anchorView(top: cameraHolderView.bottomAnchor, right: cameraHolderView.rightAnchor, paddingTop: 20, paddingRight: 20)
-    }
-    
-    func setupSession() {
-        captureSession.beginConfiguration()
-        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) else {
-            return
-        }
         
-        do {
-            let videoInput = try AVCaptureDeviceInput(device: camera)
-            if captureSession.canAddInput(videoInput) {
-                captureSession.addInput(videoInput)
-            }
-        } catch {
-            print("Error setting device input: \(error)")
-            return
-        }
-        let output = AVCaptureVideoDataOutput()
-        output.alwaysDiscardsLateVideoFrames = true
-        output.setSampleBufferDelegate(self, queue: DispatchQueue(label: "camera.frame.queue"))
-        captureSession.addOutput(output)
-        output.connections.first?.videoOrientation = .portrait
-        output.connections.first?.isVideoMirrored = true
-        
-        captureSession.commitConfiguration()
-    }
-    
-    func setupMetal() {
-        metalDevice = MTLCreateSystemDefaultDevice()
-        metalCommandQueue = metalDevice.makeCommandQueue()
-        cameraView.device = metalDevice
-        cameraView.isPaused = true
-        cameraView.enableSetNeedsDisplay = false
-        cameraView.delegate = self
-        cameraView.framebufferOnly = false
-    }
-    
-    func setupCoreImage() {
-        ciContext = CIContext(mtlDevice: metalDevice)
+        view.addSubview(ratioButton)
+        ratioButton.setImage(.init(systemName: "aspectratio.fill"), for: .normal)
+        ratioButton.addTarget(self, action: #selector(showAspectRatioSelection), for: .touchUpInside)
+        ratioButton.anchorView(bottom: cameraHolderView.bottomAnchor)
+        ratioButton.centerAnchor(x: cameraHolderView)
     }
     
     @objc func showCameraSelection() {
@@ -224,6 +221,71 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
         present(alert, animated: true)
     }
     
+    @objc func showAspectRatioSelection() {
+        let ratios = AspectRatio.allCases
+        
+        let alert = UIAlertController(title: "Aspect Ratio", message: nil, preferredStyle: .actionSheet)
+        
+        for ratio in ratios {
+            alert.addAction(UIAlertAction(title: ratio.rawValue, style: .default, handler: {[unowned self] _ in
+                changeCameraFrame(to: ratio)
+            }))
+        }
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        present(alert, animated: true)
+    }
+    
+    
+    func changeCameraFrame(to newRatio: AspectRatio){
+        selectedAspectRatio = newRatio
+        
+        cameraViewWidthConstraint.constant = newRatio.size.width
+        cameraViewHeightConstraint.constant = newRatio.size.height
+        UIView.animate(withDuration: 0.3) {[unowned self] in
+            view.layoutIfNeeded()
+        }
+    }
+    
+    func setupSession() {
+        captureSession.beginConfiguration()
+        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+            return
+        }
+        
+        do {
+            let videoInput = try AVCaptureDeviceInput(device: camera)
+            if captureSession.canAddInput(videoInput) {
+                captureSession.addInput(videoInput)
+            }
+        } catch {
+            print("Error setting device input: \(error)")
+            return
+        }
+        let output = AVCaptureVideoDataOutput()
+        output.alwaysDiscardsLateVideoFrames = true
+        output.setSampleBufferDelegate(self, queue: DispatchQueue(label: "camera.frame.queue"))
+        captureSession.addOutput(output)
+        output.connections.first?.videoOrientation = .portrait
+        output.connections.first?.isVideoMirrored = false
+        
+        captureSession.commitConfiguration()
+    }
+    
+    func setupMetal() {
+        metalDevice = MTLCreateSystemDefaultDevice()
+        metalCommandQueue = metalDevice.makeCommandQueue()
+        cameraView.device = metalDevice
+        cameraView.isPaused = true
+        cameraView.enableSetNeedsDisplay = false
+        cameraView.delegate = self
+        cameraView.framebufferOnly = false
+    }
+    
+    func setupCoreImage() {
+        ciContext = CIContext(mtlDevice: metalDevice)
+    }
+    
+    
     func switchToCamera(device: AVCaptureDevice) {
         stopGalleryVideoObserver()
         
@@ -254,46 +316,7 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
         }
     }
     
-    func switchCamera() {
-        
-        self.captureSession.beginConfiguration()
-        
-        // Remove all inputs
-        for input in self.captureSession.inputs {
-            self.captureSession.removeInput(input)
-        }
-        
-        // Toggle camera position
-        self.currentCameraPosition = self.currentCameraPosition.toggle
-        
-        // Select new camera
-        guard let newCamera = AVCaptureDevice.default(.builtInDualCamera, for: .video, position: self.currentCameraPosition) else {
-            print("Failed to get new camera.")
-            self.captureSession.commitConfiguration()
-            return
-        }
-        
-        do {
-            let newInput = try AVCaptureDeviceInput(device: newCamera)
-            if self.captureSession.canAddInput(newInput) {
-                self.captureSession.addInput(newInput)
-            }
-        } catch {
-            print("Failed to switch camera: \(error)")
-            self.captureSession.commitConfiguration()
-            return
-        }
-        
-        // Mirror front camera
-        if let connection = self.captureSession.connections.first {
-            connection.isVideoMirrored = (self.currentCameraPosition == .front)
-            connection.videoOrientation = .portrait
-        }
-        
-        UIView.transition(with: self.cameraHolderView, duration: 0.5, options: .transitionFlipFromLeft, animations: {
-            self.captureSession.commitConfiguration()
-        })
-    }
+
     
     func startSession() {
         if !captureSession.isRunning {
@@ -348,14 +371,21 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
         }
     }
     
-    @objc func flipCameraTapped() {
-        switchCamera()
-    }
-    
     @objc func capturePhoto(){
         guard let ciImage = currentCIImage else { return }
         
-        let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent)
+        // 1. Crop to square
+        let inputExtent = ciImage.extent
+        let viewSize = cameraView.drawableSize
+        let x = (inputExtent.width - viewSize.width) / 2
+        let y = (inputExtent.height - viewSize.height) / 2
+        let squareCropRect = CGRect(x: x,
+                                    y: y,
+                                    width: viewSize.width,
+                                    height: viewSize.height)
+        let croppedImage = ciImage.cropped(to: squareCropRect)
+        
+        let cgImage = ciContext.createCGImage(croppedImage, from: croppedImage.extent)
         guard let image = cgImage else { return }
         
         let uiImage = UIImage(cgImage: image, scale: UIScreen.main.scale, orientation: .up)
@@ -391,16 +421,16 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
                 assetWriter = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
                 let settings: [String: Any] = [
                     AVVideoCodecKey: AVVideoCodecType.h264,
-                    AVVideoWidthKey: 720,
-                    AVVideoHeightKey: 1280
+                    AVVideoWidthKey: cameraView.drawableSize.width,
+                    AVVideoHeightKey: cameraView.drawableSize.height
                 ]
                 videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
                 videoInput?.expectsMediaDataInRealTime = true
                 
                 let bufferAttributes: [String: Any] = [
                     kCVPixelBufferPixelFormatTypeKey as String: Int(kCVPixelFormatType_32BGRA),
-                    kCVPixelBufferWidthKey as String: 720,
-                    kCVPixelBufferHeightKey as String: 1280
+                    kCVPixelBufferWidthKey as String: cameraView.drawableSize.width,
+                    kCVPixelBufferHeightKey as String: cameraView.drawableSize.height
                 ]
                 if let videoInput = videoInput, assetWriter?.canAdd(videoInput) == true {
                     assetWriter?.add(videoInput)
@@ -507,7 +537,7 @@ extension CameraViewController {
         let pixelBufferSize = CGSize(width: CVPixelBufferGetWidth(pixelBuffer), height: CVPixelBufferGetHeight(pixelBuffer))
         let scaleX = pixelBufferSize.width / image.extent.width
         let scaleY = pixelBufferSize.height / image.extent.height
-        let scale = min(scaleX, scaleY)
+        let scale = max(scaleX, scaleY)
         
         let scaledImage = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         let xOffset = (pixelBufferSize.width - scaledImage.extent.width) / 2
@@ -532,7 +562,7 @@ extension CameraViewController: MTKViewDelegate {
         let drawSize = cameraView.drawableSize
         let scaleX = drawSize.width / ciImage.extent.width
         let scaleY = drawSize.height / ciImage.extent.height
-        let scale = min(scaleX, scaleY)
+        let scale = max(scaleX, scaleY)
         
         let scaledImage = ciImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
         
@@ -568,9 +598,7 @@ extension CameraViewController: MTKViewDelegate {
         commandBuffer.commit()
     }
     
-    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
-        // No-op
-    }
+    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 }
 
 //MARK: - photo picker
