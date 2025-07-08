@@ -99,6 +99,8 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
     let videoCaptureButton = UIButton(type: .system)
     let filtersListView = FilterSelectionView()
     
+    var audioInput: AVAssetWriterInput?
+    
     public var currentCIImage: CIImage? {
         didSet {
             cameraView.draw()
@@ -248,7 +250,8 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
     
     func setupSession() {
         captureSession.beginConfiguration()
-        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+        // --- VIDEO ---
+        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) else {
             return
         }
         
@@ -261,13 +264,27 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
             print("Error setting device input: \(error)")
             return
         }
-        let output = AVCaptureVideoDataOutput()
-        output.alwaysDiscardsLateVideoFrames = true
-        output.setSampleBufferDelegate(self, queue: DispatchQueue(label: "camera.frame.queue"))
-        captureSession.addOutput(output)
-        output.connections.first?.videoOrientation = .portrait
-        output.connections.first?.isVideoMirrored = false
-        
+        // --- AUDIO ---
+        if let audioDevice = AVCaptureDevice.default(for: .audio),
+           let audioInput = try? AVCaptureDeviceInput(device: audioDevice),
+           captureSession.canAddInput(audioInput) {
+            captureSession.addInput(audioInput)
+        }
+
+        let audioOutput = AVCaptureAudioDataOutput()
+        if captureSession.canAddOutput(audioOutput) {
+            audioOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "audio.queue"))
+            captureSession.addOutput(audioOutput)
+        }
+
+        // --- VIDEO OUTPUT ---
+        let videoOutput = AVCaptureVideoDataOutput()
+        videoOutput.alwaysDiscardsLateVideoFrames = true
+        videoOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "camera.frame.queue"))
+        captureSession.addOutput(videoOutput)
+        videoOutput.connections.first?.videoOrientation = .portrait
+        videoOutput.connections.first?.isVideoMirrored = true
+
         captureSession.commitConfiguration()
     }
     
@@ -419,6 +436,7 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
             let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("output_\(UUID().uuidString).mp4")
             do {
                 assetWriter = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
+                // Video input
                 let settings: [String: Any] = [
                     AVVideoCodecKey: AVVideoCodecType.h264,
                     AVVideoWidthKey: cameraView.drawableSize.width,
@@ -439,6 +457,22 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
                         sourcePixelBufferAttributes: bufferAttributes)
                 }
                 
+                // ✅ Audio input
+                let audioSettings: [String: Any] = [
+                    AVFormatIDKey: kAudioFormatMPEG4AAC,
+                    AVNumberOfChannelsKey: 1,
+                    AVSampleRateKey: 44100,
+                    AVEncoderBitRateKey: 64000
+                ]
+
+                let audioWriterInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+                audioWriterInput.expectsMediaDataInRealTime = true
+
+                if assetWriter?.canAdd(audioWriterInput) == true {
+                    assetWriter?.add(audioWriterInput)
+                    self.audioInput = audioWriterInput
+                }
+
                 assetWriter?.startWriting()
                 hasStartedSession = false
                 isRecording = true
@@ -450,8 +484,19 @@ class CameraViewController: UIViewController, FilterSelectionViewDelegate, PHPic
 }
 
 // MARK: -  AVCaptureVideoDataOutputSampleBufferDelegate
-extension CameraViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
+extension CameraViewController: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        
+        // Check if it's an audio buffer
+        if let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer),
+           CMFormatDescriptionGetMediaType(formatDesc) == kCMMediaType_Audio {
+            if isRecording,
+               let audioInput = self.audioInput,
+               audioInput.isReadyForMoreMediaData {
+                audioInput.append(sampleBuffer)
+            }
+            return
+        }
         
         // Grab the pixelbuffer frame from the camera output
         guard let pixelBuffer = sampleBuffer.imageBuffer else { return }
